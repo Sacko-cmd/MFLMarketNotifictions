@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MFL Monitor</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --black:    #000000;
+  --bg1:      #0a0a0f;
+  --bg2:      #10101a;
+  --bg3:      #1a1a2a;
+  --bg4:      #22223a;
+  --yellow:   #F58426;
+  --yellow2:  #ff9940;
+  --yellow-dim: #3a1e00;
+  --yellow-bg:  #1a0e00;
+  --green:    #00ff41;
+  --green-dim:#003310;
+  --red:      #ff2020;
+  --red-dim:  #330808;
+  --text1:    #d4e8ff;
+  --text2:    #7aabdb;
+  --text3:    #3a6090;
+  --discord:  #7289da;
+  --border:   #002a4a;
+  --border2:  #003a6a;
+  --knicks-blue: #006BB6;
+  --knicks-orange: #F58426;
+}
+
+body {
+  width: 360px;
+  background: var(--black);
+  color: var(--text1);
+  font-family: 'Rajdhani', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  min-height: 180px;
+  border: 1px solid var(--yellow-dim);
+}
+
+/* ── HEADER ── */
+.header {
+  background: var(--bg1);
+  border-bottom: 1px solid var(--yellow-dim);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  overflow: hidden;
+}
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--knicks-orange), transparent);
+  opacity: 0.6;
+}
+.header-text { flex: 1; }
+.header h1 {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--knicks-orange);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(245,132,38,0.5);
+}
+.header p {
+  font-size: 10px;
+  color: var(--text3);
+  margin-top: 1px;
+  font-family: 'Share Tech Mono', monospace;
+  letter-spacing: 0.05em;
+}
+.tagline {
+  font-size: 8px;
+  color: var(--knicks-blue);
+  margin-top: 2px;
+  font-family: 'Share Tech Mono', monospace;
+  letter-spacing: 0.04em;
+  font-style: italic;
+  opacity: 0.85;
+}
+.btn-add {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  background: var(--yellow-bg);
+  border: 1px solid var(--yellow-dim);
+  color: var(--knicks-orange);
+  border-radius: 2px;
+  padding: 5px 11px;
+  cursor: pointer;
+  letter-spacing: 0.1em;
+  transition: all 0.15s;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.btn-add:hover {
+  background: var(--yellow-dim);
+  border-color: var(--knicks-orange);
+  box-shadow: 0 0 8px rgba(245,132,38,0.3);
+}
+
+/* ── MONITOR LIST ── */
+#monitor-list {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 28px 16px;
+  color: var(--text3);
+}
+.empty-state p {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  line-height: 1.9;
+  letter-spacing: 0.05em;
+}
+.empty-state strong { color: var(--text2); }
+
+/* ── MONITOR CARD ── */
+.monitor-card {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+  transition: border-color 0.2s;
+}
+.monitor-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 2px; height: 100%;
+  background: var(--yellow-dim);
+  transition: background 0.3s, box-shadow 0.3s;
+}
+.monitor-card.active-card::before {
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green), 0 0 16px rgba(0,255,65,0.3);
+}
+.monitor-card.paused-card::before {
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red), 0 0 16px rgba(255,32,32,0.3);
+}
+.monitor-card:hover { border-color: var(--border2); }
+
+.card-main {
+  padding: 9px 11px 9px 13px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.card-dot-wrap {
+  padding-top: 3px;
+  flex-shrink: 0;
+}
+.card-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green), 0 0 12px rgba(0,255,65,0.4);
+  animation: pulse-green 2s ease-in-out infinite;
+}
+.card-dot.off {
+  background: var(--red);
+  box-shadow: 0 0 6px var(--red), 0 0 12px rgba(255,32,32,0.4);
+  animation: pulse-red 2.5s ease-in-out infinite;
+}
+.card-dot.error {
+  background: var(--red);
+  box-shadow: 0 0 6px var(--red);
+  animation: blink-red 0.8s step-end infinite;
+}
+
+@keyframes pulse-green {
+  0%,100% { box-shadow: 0 0 4px var(--green), 0 0 8px rgba(0,255,65,0.3); opacity:1; }
+  50%      { box-shadow: 0 0 10px var(--green), 0 0 20px rgba(0,255,65,0.5); opacity:0.8; }
+}
+@keyframes pulse-red {
+  0%,100% { box-shadow: 0 0 4px var(--red), 0 0 8px rgba(255,32,32,0.3); opacity:1; }
+  50%      { box-shadow: 0 0 10px var(--red), 0 0 20px rgba(255,32,32,0.5); opacity:0.6; }
+}
+@keyframes blink-red {
+  0%,100% { opacity:1; } 50% { opacity:0.2; }
+}
+
+.card-info { flex: 1; min-width: 0; }
+.card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--knicks-orange);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.05em;
+  margin-bottom: 5px;
+  text-shadow: 0 0 8px rgba(245,132,38,0.3);
+}
+.card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+.meta-text {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  color: var(--text3);
+  letter-spacing: 0.04em;
+}
+
+.badge {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 1px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.badge-desktop { background: var(--bg3); color: var(--text2); border: 1px solid var(--border2); }
+.badge-discord { background: #1a1d2e;   color: var(--discord); border: 1px solid #2a2d4e; }
+.badge-both    { background: var(--yellow-bg); color: var(--knicks-orange); border: 1px solid var(--yellow-dim); }
+.badge-new     { background: var(--green-dim); color: var(--green); border: 1px solid #005520; font-weight:700; }
+.badge-error   { background: var(--red-dim);   color: var(--red);   border: 1px solid #550a0a; }
+
+/* Card actions */
+.card-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.btn-pause {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  border-radius: 2px;
+  padding: 3px 9px;
+  cursor: pointer;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: all 0.15s;
+  border: 1px solid;
+}
+.btn-pause.running {
+  background: var(--red-dim);
+  border-color: #550a0a;
+  color: var(--red);
+}
+.btn-pause.running:hover {
+  background: #3d0a0a;
+  border-color: var(--red);
+  box-shadow: 0 0 6px rgba(255,32,32,0.3);
+}
+.btn-pause.paused {
+  background: var(--green-dim);
+  border-color: #005520;
+  color: var(--green);
+}
+.btn-pause.paused:hover {
+  background: #004418;
+  border-color: var(--green);
+  box-shadow: 0 0 6px rgba(0,255,65,0.3);
+}
+
+.btn-delete {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 2px;
+  letter-spacing: 0.06em;
+  transition: color 0.12s;
+}
+.btn-delete:hover { color: var(--red); }
+
+/* ── CARD FOOTER ── */
+.card-footer {
+  background: var(--black);
+  border-top: 1px solid var(--border);
+  padding: 5px 11px 5px 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.footer-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  color: var(--text3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.interval-select {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  color: var(--text2);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  border-radius: 2px;
+  padding: 2px 5px;
+  outline: none;
+  cursor: pointer;
+}
+.interval-select:focus { border-color: var(--knicks-orange); }
+.interval-select option { background: var(--bg2); }
+
+.btn-check {
+  margin-left: auto;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  color: var(--text3);
+  border-radius: 2px;
+  padding: 2px 9px;
+  cursor: pointer;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: all 0.12s;
+}
+.btn-check:hover {
+  color: var(--knicks-orange);
+  border-color: var(--yellow-dim);
+}
+
+/* ── ADD PANEL ── */
+#add-panel {
+  display: none;
+  background: var(--bg1);
+  border-top: 1px solid var(--yellow-dim);
+  padding: 11px 12px;
+}
+#add-panel.open { display: block; }
+
+.panel-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: var(--knicks-orange);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.field { margin-bottom: 8px; }
+.field-label {
+  display: block;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 4px;
+}
+.field input,
+.field select {
+  width: 100%;
+  background: var(--black);
+  border: 1px solid var(--border2);
+  color: var(--text1);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  border-radius: 2px;
+  padding: 6px 8px;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.field input:focus,
+.field select:focus {
+  border-color: var(--knicks-orange);
+  box-shadow: 0 0 6px rgba(245,132,38,0.15);
+}
+.field input::placeholder { color: var(--text3); }
+.field select option { background: var(--bg2); }
+.field .hint {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  color: var(--text3);
+  margin-top: 4px;
+  line-height: 1.5;
+  letter-spacing: 0.03em;
+}
+
+.url-row { display: flex; gap: 5px; }
+.url-row input { flex: 1; }
+
+.btn-detect {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  background: var(--yellow-bg);
+  border: 1px solid var(--yellow-dim);
+  color: var(--knicks-orange);
+  border-radius: 2px;
+  padding: 6px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: all 0.15s;
+}
+.btn-detect:hover {
+  background: var(--yellow-dim);
+  box-shadow: 0 0 8px rgba(245,132,38,0.2);
+}
+
+.api-preview {
+  display: none;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  color: var(--text3);
+  margin-top: 4px;
+  word-break: break-all;
+  line-height: 1.5;
+  padding: 4px 7px;
+  background: var(--black);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+.api-preview.show { display: block; }
+
+.divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 9px 0 8px;
+}
+
+.section-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 7px;
+}
+
+/* Mode pills */
+.mode-group { display: flex; gap: 5px; margin-bottom: 8px; }
+.mode-group input[type="radio"] { display: none; }
+.mode-group label {
+  flex: 1;
+  text-align: center;
+  padding: 5px 4px;
+  background: var(--black);
+  border: 1px solid var(--border2);
+  border-radius: 2px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  color: var(--text3);
+  cursor: pointer;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: all 0.12s;
+  user-select: none;
+}
+.mode-group label:hover { color: var(--text2); border-color: var(--text2); }
+#mode-desktop:checked + label {
+  background: var(--bg3); border-color: var(--border2); color: var(--text1);
+}
+#mode-discord:checked + label {
+  background: #1a1d2e; border-color: #2a2d4e; color: var(--discord);
+}
+#mode-both:checked + label {
+  background: var(--yellow-bg); border-color: var(--yellow-dim); color: var(--knicks-orange);
+}
+
+#discord-section.hidden { display: none; }
+
+.panel-actions { display: flex; gap: 6px; margin-top: 10px; }
+.btn-save {
+  flex: 1;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  background: var(--yellow-bg);
+  border: 1px solid var(--yellow-dim);
+  color: var(--knicks-orange);
+  border-radius: 2px;
+  padding: 7px;
+  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: all 0.15s;
+}
+.btn-save:hover {
+  background: var(--yellow-dim);
+  box-shadow: 0 0 10px rgba(245,132,38,0.25);
+}
+.btn-save:disabled { opacity: 0.3; cursor: not-allowed; }
+.btn-cancel {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  color: var(--text2);
+  border-radius: 2px;
+  padding: 7px 13px;
+  cursor: pointer;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background 0.12s;
+}
+.btn-cancel:hover { background: var(--bg3); }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed;
+  bottom: 10px; left: 50%;
+  transform: translateX(-50%) translateY(6px);
+  background: var(--bg2);
+  border: 1px solid var(--yellow-dim);
+  color: var(--knicks-orange);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  padding: 4px 14px;
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.15s, transform 0.15s;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 99;
+  letter-spacing: 0.06em;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.err { color: var(--red); border-color: #550a0a; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-text">
+    <h1>MFL MONITOR</h1>
+    <p>// marketplace surveillance</p>
+    <div class="tagline">Developed by Sacko, for the people</div>
+  </div>
+  <button class="btn-add" id="btn-add-open">+ NEW</button>
+</div>
+
+<div id="monitor-list">
+  <div class="empty-state" id="empty-state">
+    <p>// no monitors configured<br><strong>click [ + NEW ]</strong> to add one<br>browse mfl with filters, then click + new</p>
+  </div>
+</div>
+
+<div id="add-panel">
+  <div class="panel-title">// new_monitor.init</div>
+
+  <div class="field">
+    <label class="field-label">marketplace url</label>
+    <div class="url-row">
+      <input type="text" id="input-url" placeholder="browse mfl then click auto-detect →">
+      <button class="btn-detect" id="btn-translate">detect</button>
+    </div>
+    <div class="api-preview" id="api-preview"></div>
+  </div>
+
+  <div class="field">
+    <label class="field-label">label</label>
+    <input type="text" id="input-label" placeholder="e.g. GK under 22">
+  </div>
+
+  <div class="field">
+    <label class="field-label">check interval</label>
+    <select id="input-interval">
+      <option value="1">every 1 minute</option>
+      <option value="2" selected>every 2 minutes</option>
+      <option value="5">every 5 minutes</option>
+      <option value="10">every 10 minutes</option>
+      <option value="30">every 30 minutes</option>
+    </select>
+  </div>
+
+  <hr class="divider">
+  <div class="section-label">// notification_mode</div>
+
+  <div class="mode-group">
+    <input type="radio" name="notif-mode" id="mode-desktop" value="desktop" checked>
+    <label for="mode-desktop">desktop</label>
+    <input type="radio" name="notif-mode" id="mode-discord" value="discord">
+    <label for="mode-discord">discord</label>
+    <input type="radio" name="notif-mode" id="mode-both" value="both">
+    <label for="mode-both">both</label>
+  </div>
+
+  <div id="discord-section" class="field hidden">
+    <label class="field-label">discord webhook url</label>
+    <input type="text" id="input-webhook" placeholder="https://discord.com/api/webhooks/...">
+    <div class="hint">// listings sent as embeds to this channel</div>
+  </div>
+
+  <div class="panel-actions">
+    <button class="btn-save" id="btn-save-monitor" disabled>save monitor</button>
+    <button class="btn-cancel" id="btn-cancel">cancel</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="popup.js"></script>
+</body>
+</html>

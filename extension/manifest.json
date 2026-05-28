@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "MFL Marketplace Monitor",
+  "version": "3.0",
+  "description": "Monitor MFL marketplace filters — syncs to cloud server for 24/7 notifications",
+  "permissions": [
+    "storage",
+    "tabs",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://z519wdyajg.execute-api.us-east-1.amazonaws.com/*",
+    "https://discord.com/api/*",
+    "https://*.onrender.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
