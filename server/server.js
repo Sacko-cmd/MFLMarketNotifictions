@@ -22,10 +22,15 @@ app.use(express.json());
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,X-Install-ID");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
 });
+
+// Extract install ID from every request — scopes all data to that installation
+function getInstallId(req) {
+  return (req.headers["x-install-id"] || "").trim();
+}
 
 // ─── PERSISTENCE ─────────────────────────────────────────────────────────────
 
@@ -42,13 +47,18 @@ if (!fs.existsSync(DATA)) save([]);
 
 // ─── REST API ────────────────────────────────────────────────────────────────
 
-// GET /monitors — list all monitors
+// GET /monitors — list monitors for this installation only
 app.get("/monitors", (req, res) => {
-  res.json(load());
+  const installId = getInstallId(req);
+  if (!installId) return res.status(400).json({ error: "X-Install-ID header required" });
+  res.json(load().filter(m => m.installId === installId));
 });
 
 // POST /monitors — add a monitor (called by extension on save)
 app.post("/monitors", (req, res) => {
+  const installId = getInstallId(req);
+  if (!installId) return res.status(400).json({ error: "X-Install-ID header required" });
+
   const { id, label, pageUrl, apiUrl, discordWebhook, notifMode, intervalMinutes } = req.body;
   if (!id || !apiUrl) return res.status(400).json({ error: "id and apiUrl required" });
 
@@ -56,7 +66,7 @@ app.post("/monitors", (req, res) => {
   if (monitors.find(m => m.id === id)) return res.status(409).json({ error: "already exists" });
 
   const monitor = {
-    id, label, pageUrl, apiUrl,
+    id, installId, label, pageUrl, apiUrl,
     discordWebhook: discordWebhook || null,
     notifMode:      notifMode || "discord",
     intervalMinutes: intervalMinutes || 1,
@@ -69,14 +79,15 @@ app.post("/monitors", (req, res) => {
   monitors.push(monitor);
   save(monitors);
   scheduleOne(monitor);
-  console.log(`[API] Added monitor: "${label}"`);
+  console.log(`[API] Added monitor: "${label}" (install: ${installId.slice(0,12)}...)`);
   res.status(201).json(monitor);
 });
 
 // PATCH /monitors/:id — update (pause/resume/interval)
 app.patch("/monitors/:id", (req, res) => {
-  const monitors = load();
-  const idx = monitors.findIndex(m => m.id === req.params.id);
+  const installId = getInstallId(req);
+  const monitors  = load();
+  const idx = monitors.findIndex(m => m.id === req.params.id && m.installId === installId);
   if (idx === -1) return res.status(404).json({ error: "not found" });
 
   const allowed = ["enabled", "intervalMinutes", "label", "discordWebhook", "notifMode"];
@@ -91,8 +102,9 @@ app.patch("/monitors/:id", (req, res) => {
 
 // DELETE /monitors/:id — remove a monitor
 app.delete("/monitors/:id", (req, res) => {
-  const monitors = load();
-  const monitor  = monitors.find(m => m.id === req.params.id);
+  const installId = getInstallId(req);
+  const monitors  = load();
+  const monitor   = monitors.find(m => m.id === req.params.id && m.installId === installId);
   if (!monitor) return res.status(404).json({ error: "not found" });
 
   save(monitors.filter(m => m.id !== req.params.id));
@@ -103,7 +115,8 @@ app.delete("/monitors/:id", (req, res) => {
 
 // POST /monitors/:id/poll — trigger immediate check
 app.post("/monitors/:id/poll", (req, res) => {
-  const monitor = load().find(m => m.id === req.params.id);
+  const installId = getInstallId(req);
+  const monitor = load().find(m => m.id === req.params.id && m.installId === installId);
   if (!monitor) return res.status(404).json({ error: "not found" });
   pollMonitor(monitor);
   res.json({ ok: true });
