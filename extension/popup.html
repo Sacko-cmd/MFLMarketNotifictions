@@ -587,21 +587,12 @@ body {
   </div>
 
   <hr class="divider">
-  <div class="section-label">// notification_mode</div>
+  <div class="section-label">// discord_webhook</div>
 
-  <div class="mode-group">
-    <input type="radio" name="notif-mode" id="mode-desktop" value="desktop" checked>
-    <label for="mode-desktop">desktop</label>
-    <input type="radio" name="notif-mode" id="mode-discord" value="discord">
-    <label for="mode-discord">discord</label>
-    <input type="radio" name="notif-mode" id="mode-both" value="both">
-    <label for="mode-both">both</label>
-  </div>
-
-  <div id="discord-section" class="field hidden">
+  <div class="field">
     <label class="field-label">discord webhook url</label>
     <input type="text" id="input-webhook" placeholder="https://discord.com/api/webhooks/...">
-    <div class="hint">// listings sent as embeds to this channel</div>
+    <div class="hint">// alerts show name, price, and filter label</div>
   </div>
 
   <div class="panel-actions">
