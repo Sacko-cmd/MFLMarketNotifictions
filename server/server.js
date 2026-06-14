@@ -193,62 +193,103 @@ function extractMeta(item) {
   };
 }
 
-function getPlayerProfileUrl(item) {
+function isClubMonitor(monitor) {
+  const pageUrl = (monitor?.pageUrl || "").toLowerCase();
+  const apiUrl  = (monitor?.apiUrl || "").toLowerCase();
+  return pageUrl.includes("/marketplace/clubs")
+    || pageUrl.includes("/clubs")
+    || apiUrl.includes("type=club");
+}
+
+function isClubListing(item) {
+  return Boolean(item.club);
+}
+
+function getItemUrl(item, monitor) {
+  const listingId = getListingId(item);
+
+  if (isClubListing(item) || isClubMonitor(monitor)) {
+    if (listingId) {
+      return `https://app.playmfl.com/marketplace/clubs?listingResourceId=${listingId}`;
+    }
+    const club = item.club || {};
+    if (club.id) return `https://app.playmfl.com/clubs/${club.id}`;
+    return "https://app.playmfl.com/marketplace/clubs";
+  }
+
+  if (listingId) {
+    return `https://app.playmfl.com/marketplace?listingResourceId=${listingId}`;
+  }
+
   const player = item.player || {};
   const meta   = player.metadata || {};
   const slug   = player.slug || meta.slug || player.playerSlug || meta.playerSlug;
-  const id     = player.id  || player.playerId || meta.id || meta.playerId || item.playerId;
+  const id     = player.id || player.playerId || meta.id || meta.playerId || item.playerId;
   if (slug) return `https://app.playmfl.com/players/${slug}`;
   if (id)   return `https://app.playmfl.com/players/${id}`;
   return "https://app.playmfl.com/marketplace";
+}
+
+function formatPrice(price) {
+  return price !== null && price !== undefined ? `$${price}` : "Price N/A";
+}
+
+function buildAlertText(item, monitor) {
+  const meta = extractMeta(item);
+  return `${meta.name} · ${formatPrice(meta.price)} · ${monitor.label}`;
 }
 
 // ─── DISCORD ─────────────────────────────────────────────────────────────────
 
 async function sendDiscord(monitor, items) {
   if (!monitor.discordWebhook) return;
-  const chunks = [];
-  for (let i = 0; i < items.length; i += 10) chunks.push(items.slice(i, i + 10));
 
-  for (const chunk of chunks) {
-    const embeds = chunk.map(item => {
-      const meta   = extractMeta(item);
-      const fields = [];
-      if (meta.posStr)           fields.push({ name:"Position", value:meta.posStr,          inline:true });
-      if (meta.overall !== null) fields.push({ name:"Overall",  value:String(meta.overall), inline:true });
-      if (meta.age !== null)     fields.push({ name:"Age",      value:String(meta.age),     inline:true });
-      if (meta.price !== null)   fields.push({ name:"Price",    value:`$${meta.price}`,     inline:true });
-      if (meta.seller)           fields.push({ name:"Seller",   value:meta.seller,          inline:true });
-      const stats = [
-        meta.pace      != null ? `PAC ${meta.pace}`      : null,
-        meta.shooting  != null ? `SHO ${meta.shooting}`  : null,
-        meta.passing   != null ? `PAS ${meta.passing}`   : null,
-        meta.dribbling != null ? `DRI ${meta.dribbling}` : null,
-        meta.defense   != null ? `DEF ${meta.defense}`   : null,
-        meta.physical  != null ? `PHY ${meta.physical}`  : null,
-      ].filter(Boolean).join(" · ");
-      if (stats) fields.push({ name:"Stats",   value:stats,                                          inline:false });
-      fields.push(            { name:"Profile", value:`[View on MFL](${getPlayerProfileUrl(item)})`, inline:false });
-      return {
-        title:     meta.name,
-        url:       getPlayerProfileUrl(item),
-        color:     0x2563eb,
-        fields,
-        footer:    { text: `MFL Monitor · ${monitor.label}` },
-        timestamp: new Date().toISOString(),
-      };
-    });
+  for (const item of items) {
+    const meta    = extractMeta(item);
+    const itemUrl = getItemUrl(item, monitor);
+    const fields  = [];
+    if (meta.posStr)           fields.push({ name:"Position", value:meta.posStr,          inline:true });
+    if (meta.overall !== null) fields.push({ name:"Overall",  value:String(meta.overall), inline:true });
+    if (meta.age !== null)     fields.push({ name:"Age",      value:String(meta.age),     inline:true });
+    if (meta.price !== null)   fields.push({ name:"Price",    value:formatPrice(meta.price), inline:true });
+    if (meta.seller)           fields.push({ name:"Seller",   value:meta.seller,          inline:true });
+    const stats = [
+      meta.pace      != null ? `PAC ${meta.pace}`      : null,
+      meta.shooting  != null ? `SHO ${meta.shooting}`  : null,
+      meta.passing   != null ? `PAS ${meta.passing}`   : null,
+      meta.dribbling != null ? `DRI ${meta.dribbling}` : null,
+      meta.defense   != null ? `DEF ${meta.defense}`   : null,
+      meta.physical  != null ? `PHY ${meta.physical}`  : null,
+    ].filter(Boolean).join(" · ");
+    if (stats) fields.push({ name:"Stats", value:stats, inline:false });
+    fields.push({ name:"Filter", value:monitor.label, inline:false });
+    fields.push({ name:"Open", value:`[View listing](${itemUrl})`, inline:false });
+
+    const embed = {
+      title:       meta.name,
+      url:         itemUrl,
+      description: `${formatPrice(meta.price)} · ${monitor.label}`,
+      color:       0x2563eb,
+      fields,
+      footer:      { text: "MFL Monitor" },
+      timestamp:   new Date().toISOString(),
+    };
+
     try {
       const r = await (await fetch)(monitor.discordWebhook, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "MFL Monitor", embeds }),
+        body: JSON.stringify({
+          username: "MFL Monitor",
+          content: buildAlertText(item, monitor),
+          embeds: [embed],
+        }),
       });
       if (!r.ok) console.error(`[Discord] HTTP ${r.status} for "${monitor.label}"`);
     } catch(e) {
       console.error(`[Discord] Error for "${monitor.label}":`, e.message);
     }
-    if (chunks.length > 1) await new Promise(r => setTimeout(r, 1000));
+    if (items.length > 1) await new Promise(r => setTimeout(r, 500));
   }
 }
 
@@ -285,8 +326,7 @@ async function pollMonitor(monitor) {
     if (newItems.length === 0) { console.log(`  → no new listings`); return; }
     console.log(`  → ${newItems.length} new — sending to Discord`);
 
-    const mode = monitor.notifMode || "discord";
-    if ((mode === "discord" || mode === "both") && monitor.discordWebhook) {
+    if (monitor.discordWebhook) {
       await sendDiscord(monitor, newItems);
     }
   } catch(err) {
