@@ -1,18 +1,31 @@
 /**
  * popup.js
- * All monitor data lives on the cloud server.
- * The extension reads from and writes to the server via fetch().
- * chrome.storage is only used to remember the server URL and last webhook.
+ * Server URL is baked in — no setup screen needed.
  */
 
 // ─── SERVER URL ──────────────────────────────────────────────────────────────
-// Set once from storage; the user configures this on first open.
 
-let SERVER_URL = "";
+const SERVER_URL = "https://mflmarketnotifictions.onrender.com";
 
-function getServerUrl() {
+// ─── INSTALL ID ──────────────────────────────────────────────────────────────
+// Generated once on first run, stored locally forever.
+// Passed with every API call so monitors are private to this installation.
+
+let INSTALL_ID = "";
+
+function getOrCreateInstallId() {
   return new Promise(resolve => {
-    chrome.storage.local.get(["serverUrl"], data => resolve(data.serverUrl || ""));
+    chrome.storage.local.get(["installId"], data => {
+      if (data.installId) {
+        INSTALL_ID = data.installId;
+        resolve(data.installId);
+      } else {
+        const newId = "mfl_" + crypto.randomUUID().replace(/-/g, "");
+        chrome.storage.local.set({ installId: newId });
+        INSTALL_ID = newId;
+        resolve(newId);
+      }
+    });
   });
 }
 
@@ -37,9 +50,12 @@ function esc(str) {
 }
 
 // ─── SERVER API CALLS ────────────────────────────────────────────────────────
+// Every request sends X-Install-ID so the server returns only that user's monitors.
 
 async function apiGet(path) {
-  const res = await fetch(`${SERVER_URL}${path}`);
+  const res = await fetch(`${SERVER_URL}${path}`, {
+    headers: { "X-Install-ID": INSTALL_ID },
+  });
   if (!res.ok) throw new Error(`Server error ${res.status}`);
   return res.json();
 }
@@ -47,7 +63,7 @@ async function apiGet(path) {
 async function apiPost(path, body) {
   const res = await fetch(`${SERVER_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Install-ID": INSTALL_ID },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Server error ${res.status}`);
@@ -57,7 +73,7 @@ async function apiPost(path, body) {
 async function apiPatch(path, body) {
   const res = await fetch(`${SERVER_URL}${path}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Install-ID": INSTALL_ID },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Server error ${res.status}`);
@@ -65,67 +81,12 @@ async function apiPatch(path, body) {
 }
 
 async function apiDelete(path) {
-  const res = await fetch(`${SERVER_URL}${path}`, { method: "DELETE" });
+  const res = await fetch(`${SERVER_URL}${path}`, {
+    method: "DELETE",
+    headers: { "X-Install-ID": INSTALL_ID },
+  });
   if (!res.ok) throw new Error(`Server error ${res.status}`);
 }
-
-// ─── SERVER URL SETUP SCREEN ─────────────────────────────────────────────────
-
-function showSetupScreen() {
-  const list = document.getElementById("monitor-list");
-  list.innerHTML = `
-    <div style="padding:14px 12px;">
-      <div class="panel-title" style="margin-bottom:10px;">// server_setup.init</div>
-      <div class="field">
-        <label class="field-label">your render server url</label>
-        <input type="text" id="setup-url" placeholder="https://your-app.onrender.com"
-          style="width:100%;background:var(--black);border:1px solid var(--border2);color:var(--text1);
-                 font-family:'Share Tech Mono',monospace;font-size:11px;border-radius:2px;padding:6px 8px;outline:none;">
-        <div class="hint" style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text3);margin-top:5px;line-height:1.6;">
-          // deploy the server folder to render.com<br>
-          // paste your web service url here once<br>
-          // see README for step-by-step guide
-        </div>
-      </div>
-      <button id="setup-save" style="margin-top:10px;width:100%;font-family:'Share Tech Mono',monospace;font-size:10px;
-        background:var(--yellow-bg);border:1px solid var(--yellow-dim);color:var(--knicks-orange);border-radius:2px;
-        padding:7px;cursor:pointer;letter-spacing:0.1em;text-transform:uppercase;">
-        save &amp; connect
-      </button>
-    </div>`;
-
-  document.getElementById("setup-save").addEventListener("click", async () => {
-    const val = document.getElementById("setup-url").value.trim().replace(/\/$/, "");
-    if (!val.startsWith("https://")) { toast("enter a valid https:// url", true); return; }
-    try {
-      const res = await fetch(`${val}/`);
-      if (!res.ok) throw new Error();
-      chrome.storage.local.set({ serverUrl: val });
-      SERVER_URL = val;
-      toast("connected!");
-      loadMonitors();
-    } catch {
-      toast("could not reach server — check url", true);
-    }
-  });
-}
-
-// ─── NOTIFICATION MODE ───────────────────────────────────────────────────────
-
-document.querySelectorAll('input[name="notif-mode"]').forEach(radio => {
-  radio.addEventListener("change", () => {
-    const mode = document.querySelector('input[name="notif-mode"]:checked').value;
-    document.getElementById("discord-section").classList.toggle("hidden", mode === "desktop");
-    if (mode === "discord" || mode === "both") {
-      const webhookInput = document.getElementById("input-webhook");
-      if (!webhookInput.value) {
-        chrome.storage.local.get(["lastDiscordWebhook"], data => {
-          if (data.lastDiscordWebhook) webhookInput.value = data.lastDiscordWebhook;
-        });
-      }
-    }
-  });
-});
 
 // ─── RENDER ──────────────────────────────────────────────────────────────────
 
@@ -144,8 +105,6 @@ function buildCard(m) {
   card.dataset.id = m.id;
 
   const dotClass   = !m.enabled ? "off" : m.lastError ? "error" : "";
-  const mode       = m.notifMode || "discord";
-  const modeBadge  = { desktop:`<span class="badge badge-desktop">desktop</span>`, discord:`<span class="badge badge-discord">discord</span>`, both:`<span class="badge badge-both">both</span>` }[mode] || "";
   const errorBadge = m.lastError ? `<span class="badge badge-error" title="${esc(m.lastError)}">err</span>` : "";
   const pauseLabel = m.enabled ? "[ pause ]" : "[ resume ]";
   const pauseClass = m.enabled ? "btn-pause running" : "btn-pause paused";
@@ -161,7 +120,7 @@ function buildCard(m) {
         <div class="card-meta">
           ${statusText}
           ${errorBadge}
-          ${modeBadge}
+          <span class="badge badge-discord">discord</span>
         </div>
       </div>
       <div class="card-actions">
@@ -211,7 +170,6 @@ function buildCard(m) {
 // ─── LOAD ────────────────────────────────────────────────────────────────────
 
 async function loadMonitors() {
-  if (!SERVER_URL) { showSetupScreen(); return; }
   try {
     const monitors = await apiGet("/monitors");
     renderMonitors(monitors);
@@ -230,6 +188,11 @@ document.getElementById("btn-add-open").addEventListener("click", () => {
   const isOpening = !panel.classList.contains("open");
   panel.classList.toggle("open");
   if (isOpening) {
+    chrome.storage.local.get(["lastDiscordWebhook"], data => {
+      if (data.lastDiscordWebhook) {
+        document.getElementById("input-webhook").value = data.lastDiscordWebhook;
+      }
+    });
     chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
       const tab = tabs[0];
       if (tab?.url?.includes("app.playmfl.com/marketplace")) {
@@ -251,8 +214,6 @@ function closeAddPanel() {
   document.getElementById("input-webhook").value = "";
   document.getElementById("api-preview").classList.remove("show");
   document.getElementById("btn-save-monitor").disabled = true;
-  document.getElementById("mode-desktop").checked = true;
-  document.getElementById("discord-section").classList.add("hidden");
   pendingApiUrl = null;
 }
 
@@ -295,26 +256,22 @@ document.getElementById("input-url").addEventListener("input", e => {
 });
 
 document.getElementById("btn-save-monitor").addEventListener("click", async () => {
-  if (!SERVER_URL) { toast("configure server url first", true); return; }
-
-  const pageUrl        = document.getElementById("input-url").value.trim();
-  const label          = document.getElementById("input-label").value.trim() || "monitor";
-  const intervalMinutes= parseInt(document.getElementById("input-interval").value);
-  const notifMode      = document.querySelector('input[name="notif-mode"]:checked').value;
-  const discordWebhook = document.getElementById("input-webhook").value.trim();
+  const pageUrl         = document.getElementById("input-url").value.trim();
+  const label           = document.getElementById("input-label").value.trim() || "monitor";
+  const intervalMinutes = parseInt(document.getElementById("input-interval").value);
+  const discordWebhook  = document.getElementById("input-webhook").value.trim();
 
   if (!pendingApiUrl) { toast("click detect first", true); return; }
-  if ((notifMode === "discord" || notifMode === "both") && !discordWebhook) {
+  if (!discordWebhook) {
     toast("enter a discord webhook url", true); return;
   }
-  if (discordWebhook && !discordWebhook.startsWith("https://discord.com/api/webhooks/")) {
+  if (!discordWebhook.startsWith("https://discord.com/api/webhooks/")) {
     toast("invalid discord webhook url", true); return;
   }
 
   const monitor = {
     id: uid(), label, pageUrl, apiUrl: pendingApiUrl,
-    notifMode, intervalMinutes,
-    discordWebhook: notifMode !== "desktop" ? discordWebhook : null,
+    notifMode: "discord", intervalMinutes, discordWebhook,
   };
 
   try {
@@ -330,10 +287,7 @@ document.getElementById("btn-save-monitor").addEventListener("click", async () =
 
 // ─── BOOT ────────────────────────────────────────────────────────────────────
 
-getServerUrl().then(url => {
-  SERVER_URL = url;
+getOrCreateInstallId().then(() => {
   loadMonitors();
+  setInterval(loadMonitors, 30000);
 });
-
-// Refresh list every 30s while popup is open
-setInterval(loadMonitors, 30000);
