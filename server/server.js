@@ -127,12 +127,19 @@ app.get("/", (req, res) => res.json({ status: "ok", monitors: load().length }));
 
 // ─── URL TRANSLATION (same logic as extension's background.js) ───────────────
 
+function marketplaceTypeFromPath(pathname) {
+  const p = (pathname || "").toLowerCase();
+  if (p.includes("/packs")) return "PACK";
+  if (p.includes("/clubs")) return "CLUB";
+  return "PLAYER";
+}
+
 function pageUrlToApiUrl(pageUrl) {
   try {
     const url = new URL(pageUrl);
     const p   = url.pathname.toLowerCase();
     const apiParams = new URLSearchParams({
-      limit: "25", type: p.includes("/clubs") ? "CLUB" : "PLAYER",
+      limit: "25", type: marketplaceTypeFromPath(p),
       sorts: "listing.createdDateTime", sortsOrders: "DESC",
       status: "AVAILABLE", view: "full"
     });
@@ -171,54 +178,141 @@ function getListingId(item) {
   return item.listingResourceId || item.id || item.listingId || item._id || null;
 }
 
-function extractMeta(item) {
-  const meta      = item.player?.metadata || item.club?.metadata || {};
-  const firstName = meta.firstName || item.player?.firstName || "";
-  const lastName  = meta.lastName  || item.player?.lastName  || item.club?.name || "";
-  const name      = (firstName && lastName) ? `${firstName} ${lastName}`
-                  : (lastName || firstName || item.club?.name || "New listing");
-  return {
-    name,
-    price:     item.price ?? item.listing?.price ?? null,
-    overall:   meta.overall ?? item.player?.overall ?? item.club?.overall ?? null,
-    posStr:    (meta.positions || item.player?.positions || []).slice(0,2).join("/"),
-    age:       meta.age ?? null,
-    seller:    item.sellerName || "",
-    pace:      meta.pace      ?? null,
-    shooting:  meta.shooting  ?? null,
-    passing:   meta.passing   ?? null,
-    dribbling: meta.dribbling ?? null,
-    defense:   meta.defense   ?? null,
-    physical:  meta.physical  ?? null,
-  };
-}
-
-function isClubMonitor(monitor) {
+function getListingType(item, monitor) {
+  if (item?.club) return "CLUB";
+  if (item?.pack) return "PACK";
+  if (item?.player) return "PLAYER";
   const pageUrl = (monitor?.pageUrl || "").toLowerCase();
   const apiUrl  = (monitor?.apiUrl || "").toLowerCase();
-  return pageUrl.includes("/marketplace/clubs")
-    || pageUrl.includes("/clubs")
-    || apiUrl.includes("type=club");
+  if (pageUrl.includes("/packs") || apiUrl.includes("type=pack")) return "PACK";
+  if (pageUrl.includes("/clubs") || apiUrl.includes("type=club")) return "CLUB";
+  return "PLAYER";
 }
 
-function isClubListing(item) {
-  return Boolean(item.club);
+function formatLocation(city, country) {
+  const parts = [city, country].map(v => (v || "").trim()).filter(Boolean);
+  return parts.join(", ") || "Unknown location";
+}
+
+function formatOwner(item) {
+  return item.sellerName
+    || item.club?.ownedBy?.name
+    || item.player?.ownedBy?.name
+    || item.pack?.ownedBy?.name
+    || "";
+}
+
+function formatStats(meta) {
+  const parts = [];
+  if (meta.overall !== null) parts.push(`OVR ${meta.overall}`);
+  if (meta.posStr) parts.push(meta.posStr);
+  if (meta.age !== null) parts.push(`Age ${meta.age}`);
+  const attrs = [
+    meta.pace      != null ? `PAC ${meta.pace}`      : null,
+    meta.shooting  != null ? `SHO ${meta.shooting}`  : null,
+    meta.passing   != null ? `PAS ${meta.passing}`   : null,
+    meta.dribbling != null ? `DRI ${meta.dribbling}` : null,
+    meta.defense   != null ? `DEF ${meta.defense}`   : null,
+    meta.physical  != null ? `PHY ${meta.physical}`  : null,
+  ].filter(Boolean);
+  if (attrs.length) parts.push(attrs.join(" · "));
+  return parts.join(" · ");
+}
+
+function extractMeta(item, monitor) {
+  const listingType = getListingType(item, monitor);
+  const price = item.price ?? item.listing?.price ?? null;
+  const owner = formatOwner(item);
+
+  if (listingType === "CLUB") {
+    const club = item.club || {};
+    const clubName = (club.name || "").trim() || `Club #${club.id || "?"}`;
+    const location = formatLocation(club.city, club.country);
+    return {
+      listingType,
+      name: clubName,
+      clubName,
+      location,
+      price,
+      owner,
+      overall: null,
+      posStr: "",
+      age: null,
+      pace: null,
+      shooting: null,
+      passing: null,
+      dribbling: null,
+      defense: null,
+      physical: null,
+      stats: "",
+    };
+  }
+
+  if (listingType === "PACK") {
+    const pack = item.pack || {};
+    const template = pack.packTemplate || {};
+    const packName = (template.name || template.type || "Pack").trim();
+    return {
+      listingType,
+      name: packName,
+      packName,
+      packType: template.type || "",
+      price,
+      owner,
+      overall: null,
+      posStr: "",
+      age: null,
+      pace: null,
+      shooting: null,
+      passing: null,
+      dribbling: null,
+      defense: null,
+      physical: null,
+      stats: "",
+    };
+  }
+
+  const meta = item.player?.metadata || {};
+  const firstName = meta.firstName || item.player?.firstName || "";
+  const lastName  = meta.lastName  || item.player?.lastName  || "";
+  const name = (firstName && lastName) ? `${firstName} ${lastName}`
+             : (lastName || firstName || "Unknown player");
+  const extracted = {
+    listingType: "PLAYER",
+    name,
+    price,
+    owner,
+    overall: meta.overall ?? item.player?.overall ?? null,
+    posStr: (meta.positions || item.player?.positions || []).slice(0, 2).join("/"),
+    age: meta.age ?? null,
+    pace: meta.pace ?? null,
+    shooting: meta.shooting ?? null,
+    passing: meta.passing ?? null,
+    dribbling: meta.dribbling ?? null,
+    defense: meta.defense ?? null,
+    physical: meta.physical ?? null,
+  };
+  extracted.stats = formatStats(extracted);
+  return extracted;
 }
 
 function getItemUrl(item, monitor) {
-  const listingId = getListingId(item);
+  const listingType = getListingType(item, monitor);
 
-  if (isClubListing(item) || isClubMonitor(monitor)) {
-    if (listingId) {
-      return `https://app.playmfl.com/marketplace/clubs?listingResourceId=${listingId}`;
-    }
+  if (listingType === "CLUB") {
     const club = item.club || {};
     if (club.id) return `https://app.playmfl.com/clubs/${club.id}`;
     return "https://app.playmfl.com/marketplace/clubs";
   }
 
-  if (listingId) {
-    return `https://app.playmfl.com/marketplace?listingResourceId=${listingId}`;
+  if (listingType === "PACK") {
+    const listingId = getListingId(item);
+    if (listingId) {
+      return `https://app.playmfl.com/marketplace/packs?listingResourceId=${listingId}`;
+    }
+    const chainId = item.pack?.chainId;
+    if (chainId) return `https://app.playmfl.com/marketplace/packs?chainId=${chainId}`;
+    return "https://app.playmfl.com/marketplace/packs";
   }
 
   const player = item.player || {};
@@ -227,7 +321,7 @@ function getItemUrl(item, monitor) {
   const id     = player.id || player.playerId || meta.id || meta.playerId || item.playerId;
   if (slug) return `https://app.playmfl.com/players/${slug}`;
   if (id)   return `https://app.playmfl.com/players/${id}`;
-  return "https://app.playmfl.com/marketplace";
+  return "https://app.playmfl.com/marketplace/players";
 }
 
 function formatPrice(price) {
@@ -235,8 +329,16 @@ function formatPrice(price) {
 }
 
 function buildAlertText(item, monitor) {
-  const meta = extractMeta(item);
-  return `${meta.name} · ${formatPrice(meta.price)} · ${monitor.label}`;
+  const meta = extractMeta(item, monitor);
+  const filter = monitor.label;
+
+  if (meta.listingType === "CLUB") {
+    return `${filter} · ${meta.clubName} · ${meta.location} · ${formatPrice(meta.price)}`;
+  }
+  if (meta.listingType === "PACK") {
+    return `${filter} · ${meta.packName} · ${formatPrice(meta.price)}`;
+  }
+  return `${filter} · ${meta.name} · ${meta.stats || "Player"} · ${formatPrice(meta.price)}`;
 }
 
 // ─── DISCORD ─────────────────────────────────────────────────────────────────
@@ -245,31 +347,40 @@ async function sendDiscord(monitor, items) {
   if (!monitor.discordWebhook) return;
 
   for (const item of items) {
-    const meta    = extractMeta(item);
+    const meta    = extractMeta(item, monitor);
     const itemUrl = getItemUrl(item, monitor);
-    const fields  = [];
-    if (meta.posStr)           fields.push({ name:"Position", value:meta.posStr,          inline:true });
-    if (meta.overall !== null) fields.push({ name:"Overall",  value:String(meta.overall), inline:true });
-    if (meta.age !== null)     fields.push({ name:"Age",      value:String(meta.age),     inline:true });
-    if (meta.price !== null)   fields.push({ name:"Price",    value:formatPrice(meta.price), inline:true });
-    if (meta.seller)           fields.push({ name:"Seller",   value:meta.seller,          inline:true });
-    const stats = [
-      meta.pace      != null ? `PAC ${meta.pace}`      : null,
-      meta.shooting  != null ? `SHO ${meta.shooting}`  : null,
-      meta.passing   != null ? `PAS ${meta.passing}`   : null,
-      meta.dribbling != null ? `DRI ${meta.dribbling}` : null,
-      meta.defense   != null ? `DEF ${meta.defense}`   : null,
-      meta.physical  != null ? `PHY ${meta.physical}`  : null,
-    ].filter(Boolean).join(" · ");
-    if (stats) fields.push({ name:"Stats", value:stats, inline:false });
-    fields.push({ name:"Filter", value:monitor.label, inline:false });
-    fields.push({ name:"Open", value:`[View listing](${itemUrl})`, inline:false });
+    const fields  = [{ name: "Filter", value: monitor.label, inline: false }];
+
+    if (meta.listingType === "CLUB") {
+      fields.push(
+        { name: "Club", value: meta.clubName, inline: true },
+        { name: "Location", value: meta.location, inline: true },
+        { name: "Price", value: formatPrice(meta.price), inline: true },
+      );
+      if (meta.owner) fields.push({ name: "Owner", value: meta.owner, inline: true });
+    } else if (meta.listingType === "PACK") {
+      fields.push(
+        { name: "Pack", value: meta.packName, inline: true },
+        { name: "Price", value: formatPrice(meta.price), inline: true },
+      );
+      if (meta.packType) fields.push({ name: "Type", value: meta.packType, inline: true });
+      if (meta.owner) fields.push({ name: "Owner", value: meta.owner, inline: true });
+    } else {
+      fields.push(
+        { name: "Player", value: meta.name, inline: true },
+        { name: "Price", value: formatPrice(meta.price), inline: true },
+      );
+      if (meta.stats) fields.push({ name: "Stats", value: meta.stats, inline: false });
+      if (meta.owner) fields.push({ name: "Owner", value: meta.owner, inline: true });
+    }
+
+    fields.push({ name: "Open", value: `[View ${meta.listingType === "CLUB" ? "club" : meta.listingType === "PACK" ? "pack" : "player"}](${itemUrl})`, inline: false });
 
     const embed = {
       title:       meta.name,
       url:         itemUrl,
-      description: `${formatPrice(meta.price)} · ${monitor.label}`,
-      color:       0x2563eb,
+      description: buildAlertText(item, monitor),
+      color:       meta.listingType === "CLUB" ? 0xF58426 : meta.listingType === "PACK" ? 0x9b59b6 : 0x2563eb,
       fields,
       footer:      { text: "MFL Monitor" },
       timestamp:   new Date().toISOString(),

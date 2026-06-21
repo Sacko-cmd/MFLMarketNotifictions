@@ -244,7 +244,7 @@ document.getElementById("btn-translate").addEventListener("click", () => {
         doTranslate(tab.url);
         toast("grabbed from current tab");
       } else {
-        toast("navigate to mfl marketplace first", true);
+        toast("navigate to mfl marketplace (players, clubs, or packs) first", true);
       }
     });
   }

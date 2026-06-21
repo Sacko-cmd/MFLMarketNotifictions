@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MFL Marketplace Monitor",
-  "version": "3.1",
+  "version": "3.2",
   "description": "Monitor MFL marketplace filters — Discord alerts via your cloud server",
   "permissions": [
     "storage",

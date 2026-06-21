@@ -7,12 +7,19 @@
 
 const BASE_API = "https://z519wdyajg.execute-api.us-east-1.amazonaws.com/prod/listings";
 
+function marketplaceTypeFromPath(pathname) {
+  const p = (pathname || "").toLowerCase();
+  if (p.includes("/packs")) return "PACK";
+  if (p.includes("/clubs")) return "CLUB";
+  return "PLAYER";
+}
+
 function pageUrlToApiUrl(pageUrl) {
   try {
     const url = new URL(pageUrl);
     const p   = url.pathname.toLowerCase();
     const apiParams = new URLSearchParams({
-      limit: "25", type: p.includes("/clubs") ? "CLUB" : "PLAYER",
+      limit: "25", type: marketplaceTypeFromPath(p),
       sorts: "listing.createdDateTime", sortsOrders: "DESC",
       status: "AVAILABLE", view: "full"
     });
@@ -49,7 +56,8 @@ function labelFromPageUrl(pageUrl) {
   try {
     const url  = new URL(pageUrl);
     const p    = url.pathname.toLowerCase();
-    const parts = [p.includes("/clubs") ? "Clubs" : "Players"];
+    const typeLabel = marketplaceTypeFromPath(p);
+    const parts = [typeLabel === "PACK" ? "Packs" : typeLabel === "CLUB" ? "Clubs" : "Players"];
     const rangeLabels = {
       "metadata.age":"Age","metadata.overall":"OVR","listing.price":"Price",
       "metadata.pace":"Pac","metadata.shooting":"Sho","metadata.passing":"Pas",
@@ -66,7 +74,7 @@ function labelFromPageUrl(pageUrl) {
         else if (mx)  parts.push(`${rangeLabels[key]}≤${mx}`);
       }
     }
-    return parts.join(" · ") || (p.includes("/clubs") ? "All Clubs" : "All Players");
+    return parts.join(" · ") || (typeLabel === "PACK" ? "All Packs" : typeLabel === "CLUB" ? "All Clubs" : "All Players");
   } catch { return "Monitor"; }
 }
 
