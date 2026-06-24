@@ -1,4 +1,14 @@
-# MFL Monitor — Combined Setup Guide
+# MFL Monitor — **Deprecated**
+
+> **This repo is no longer maintained.** The marketplace monitor has been merged into [mfl-location-tracker](https://github.com/Sacko-cmd/mfl-location-tracker).
+>
+> - **Server:** deploy `mfl-location-tracker` on Render (do not deploy this repo’s `server/` folder).
+> - **Extension:** load the `extension/` folder from `mfl-location-tracker` instead.
+> - **Render:** suspend the old `mflmarketnotifictions` web service after switching.
+
+---
+
+# MFL Monitor — Combined Setup Guide (legacy)
 
 The Chrome extension is your UI. The cloud server does the 24/7 polling and Discord notifications.
 
